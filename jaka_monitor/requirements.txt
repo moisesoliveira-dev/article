@@ -1,0 +1,28 @@
+# Sistema de Monitoramento e Análise - Robô JAKA
+# Dependências Python
+
+# MQTT Client
+paho-mqtt==1.6.1
+
+# Database
+# sqlite3 já está incluído no Python
+
+# Data Analysis
+pandas==2.0.3
+numpy==1.24.3
+
+# Plotting
+matplotlib==3.7.2
+seaborn==0.12.2
+
+# PDF Generation
+reportlab==4.0.4
+
+# Excel Export
+openpyxl==3.1.2
+xlsxwriter==3.1.2
+
+# GUI
+PyQt5==5.15.9
+
+# Logging (built-in)
