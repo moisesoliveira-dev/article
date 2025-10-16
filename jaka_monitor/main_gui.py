@@ -6,11 +6,13 @@ import sys
 import os
 from datetime import datetime
 from typing import Optional
+from queue import Queue
+from threading import Lock
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                             QLabel, QPushButton, QTextEdit, QGroupBox, QGridLayout, 
                             QTableWidget, QTableWidgetItem, QTabWidget, QProgressBar,
                             QMessageBox, QFileDialog, QStatusBar, QSplitter)
-from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QThread
+from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QThread, QMutex
 from PyQt5.QtGui import QFont, QColor, QPalette
 import logging
 
@@ -36,6 +38,12 @@ class MonitorThread(QThread):
         self.db_manager = None
         self.running = False
         self.message_counter = 0
+        
+        # Fila para processar mensagens de forma assíncrona
+        self.message_queue = Queue(maxsize=1000)
+        self.db_queue = Queue(maxsize=500)
+        self.processing = False
+        self.mutex = QMutex()
     
     def setup(self, db_manager: DatabaseManager):
         """Configura o thread com o gerenciador de banco"""
@@ -44,6 +52,7 @@ class MonitorThread(QThread):
     def run(self):
         """Executa o thread de monitoramento"""
         self.running = True
+        self.processing = True
         
         try:
             # Criar cliente MQTT
@@ -59,63 +68,129 @@ class MonitorThread(QThread):
             )
             
             # Configurar callback
-            self.mqtt_client.set_message_callback(self.process_message)
+            self.mqtt_client.set_message_callback(self.queue_message)
             
             # Conectar e iniciar
             self.mqtt_client.connect()
             self.connection_status.emit(True)
             self.mqtt_client.start()
             
-            # Manter thread ativo
+            # Iniciar thread de processamento de banco de dados
+            from threading import Thread
+            db_thread = Thread(target=self._process_db_queue, daemon=True)
+            db_thread.start()
+            
+            # Loop principal - processar fila de mensagens
             while self.running:
-                self.msleep(100)
+                try:
+                    # Processar mensagens da fila (não-bloqueante)
+                    if not self.message_queue.empty():
+                        data = self.message_queue.get(timeout=0.1)
+                        self._process_message_async(data)
+                    else:
+                        self.msleep(50)  # Pequeno delay para não sobrecarregar CPU
+                except Exception as e:
+                    logging.error(f"Erro ao processar fila: {e}")
+                    self.msleep(100)
         
         except Exception as e:
             logging.error(f"Erro no thread de monitoramento: {e}")
             self.connection_status.emit(False)
+        finally:
+            self.processing = False
     
-    def process_message(self, data: dict):
-        """Processa mensagem recebida do MQTT"""
+    def queue_message(self, data: dict):
+        """Adiciona mensagem à fila para processamento assíncrono"""
         try:
-            # Emitir dados para UI
+            if not self.message_queue.full():
+                self.message_queue.put_nowait(data)
+            else:
+                logging.warning("Fila de mensagens cheia, descartando mensagem antiga")
+                # Remove mensagem antiga e adiciona nova
+                try:
+                    self.message_queue.get_nowait()
+                    self.message_queue.put_nowait(data)
+                except:
+                    pass
+        except Exception as e:
+            logging.error(f"Erro ao enfileirar mensagem: {e}")
+    
+    def _process_message_async(self, data: dict):
+        """Processa mensagem de forma assíncrona"""
+        try:
+            # Emitir dados para UI (não-bloqueante)
             self.new_data.emit(data)
             
-            # Analisar anomalias
+            # Analisar anomalias (processamento rápido)
             anomalies = self.analyzer.analyze(data)
             
             if anomalies:
                 self.anomaly_detected.emit(anomalies)
             
-            # Salvar no banco de dados
+            # Adicionar à fila de banco de dados (não-bloqueante)
             self.message_counter += 1
             if self.message_counter % config.SAVE_INTERVAL == 0:
-                if self.db_manager:
-                    self.db_manager.insert_robot_data(data)
-                    
-                    # Registrar anomalias
-                    for anomaly in anomalies:
-                        # Calcular criticidade temporal
-                        anomaly_key = f"{anomaly.get('type')}_{anomaly.get('joint', 0)}"
-                        severity, duration = self.analyzer.calculate_criticality(
-                            anomaly_key, anomaly.get('severity', 'info')
-                        )
-                        
-                        self.db_manager.insert_event(
-                            event_type=anomaly.get('type', 'unknown'),
-                            severity=severity,
-                            description=anomaly.get('description', ''),
-                            joint_number=anomaly.get('joint'),
-                            value=anomaly.get('value'),
-                            threshold=anomaly.get('threshold'),
-                            duration=duration
-                        )
+                if self.db_manager and not self.db_queue.full():
+                    self.db_queue.put_nowait({
+                        'data': data,
+                        'anomalies': anomalies
+                    })
         
         except Exception as e:
-            logging.error(f"Erro ao processar mensagem: {e}")
+            logging.error(f"Erro ao processar mensagem async: {e}")
+    
+    def _process_db_queue(self):
+        """Thread separada para processar operações de banco de dados"""
+        while self.processing:
+            try:
+                if not self.db_queue.empty():
+                    item = self.db_queue.get(timeout=1.0)
+                    data = item['data']
+                    anomalies = item['anomalies']
+                    
+                    # Salvar dados no banco (operação bloqueante isolada)
+                    if self.db_manager:
+                        try:
+                            self.db_manager.insert_robot_data(data)
+                            
+                            # Registrar anomalias
+                            for anomaly in anomalies:
+                                anomaly_key = f"{anomaly.get('type')}_{anomaly.get('joint', 0)}"
+                                severity, duration = self.analyzer.calculate_criticality(
+                                    anomaly_key, anomaly.get('severity', 'info')
+                                )
+                                
+                                self.db_manager.insert_event(
+                                    event_type=anomaly.get('type', 'unknown'),
+                                    severity=severity,
+                                    description=anomaly.get('description', ''),
+                                    joint_number=anomaly.get('joint'),
+                                    value=anomaly.get('value'),
+                                    threshold=anomaly.get('threshold'),
+                                    duration=duration
+                                )
+                        except Exception as e:
+                            logging.error(f"Erro ao salvar no banco: {e}")
+                else:
+                    # Aguardar se não há nada na fila
+                    import time
+                    time.sleep(0.1)
+            
+            except Exception as e:
+                logging.error(f"Erro no processamento do banco: {e}")
     
     def stop(self):
         """Para o thread"""
         self.running = False
+        self.processing = False
+        
+        # Aguardar processamento das filas
+        import time
+        timeout = 5
+        start = time.time()
+        while (not self.message_queue.empty() or not self.db_queue.empty()) and (time.time() - start) < timeout:
+            time.sleep(0.1)
+        
         if self.mqtt_client:
             self.mqtt_client.stop()
 
@@ -144,13 +219,19 @@ class MainWindow(QMainWindow):
         self.current_data = None
         self.health_score = 100.0
         
+        # Controle de throttling para atualizações de UI
+        self.last_ui_update = datetime.now()
+        self.ui_update_interval = 0.1  # segundos (100ms)
+        self.pending_data = None
+        self.update_lock = Lock()
+        
         # Configurar UI
         self.init_ui()
         
-        # Timer para atualizar UI
+        # Timer para atualizar UI de forma controlada
         self.ui_timer = QTimer()
-        self.ui_timer.timeout.connect(self.update_ui)
-        self.ui_timer.start(1000)  # Atualizar a cada 1 segundo
+        self.ui_timer.timeout.connect(self.update_ui_throttled)
+        self.ui_timer.start(100)  # Atualizar a cada 100ms
     
     def setup_logging(self):
         """Configura sistema de logging"""
@@ -501,68 +582,103 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage("Erro na conexão MQTT")
     
     def update_data(self, data: dict):
-        """Atualiza interface com novos dados"""
-        self.current_data = data
-        
-        # Atualizar informações do robô
-        self.robot_id_label.setText(str(data.get("ID", "N/A")))
-        self.robot_name_label.setText(data.get("NOME", "N/A"))
-        
-        monitor_data = data.get("monitor_data", [])
-        if len(monitor_data) > 2:
-            temp = monitor_data[2]
-            self.robot_temp_label.setText(f"{temp:.1f}°C")
+        """Recebe dados e os armazena para atualização throttled"""
+        with self.update_lock:
+            self.pending_data = data
+    
+    def update_ui_throttled(self):
+        """Atualiza interface de forma controlada (throttled) para evitar travamentos"""
+        with self.update_lock:
+            if self.pending_data is None:
+                return
             
-            # Colorir baseado na temperatura
-            if temp >= config.THRESHOLDS["robot_temp_critical"]:
-                self.robot_temp_label.setStyleSheet("color: red; font-weight: bold;")
-            elif temp >= config.THRESHOLDS["robot_temp_warning"]:
-                self.robot_temp_label.setStyleSheet("color: orange; font-weight: bold;")
-            else:
-                self.robot_temp_label.setStyleSheet("color: green;")
+            data = self.pending_data
+            self.pending_data = None
         
-        # Estado da tarefa
-        task_states = {0: "Desconhecido", 1: "Iniciando", 2: "Executando", 3: "Pausado", 4: "IDLE", 5: "Erro"}
-        self.task_state_label.setText(task_states.get(data.get("task_state", 0), "Desconhecido"))
-        
-        # Posição TCP
-        position = data.get("actual_position", [0]*6)
-        if len(position) >= 6:
-            self.tcp_x_label.setText(f"{position[0]:.2f}")
-            self.tcp_y_label.setText(f"{position[1]:.2f}")
-            self.tcp_z_label.setText(f"{position[2]:.2f}")
-            self.tcp_rx_label.setText(f"{position[3]:.2f}")
-            self.tcp_ry_label.setText(f"{position[4]:.2f}")
-            self.tcp_rz_label.setText(f"{position[5]:.2f}")
-        
-        # Atualizar tabela de juntas
-        if len(monitor_data) > 5 and isinstance(monitor_data[5], list):
-            joint_positions = data.get("joint_actual_position", [])
-            joint_velocities = data.get("instVel", [])
+        try:
+            self.current_data = data
             
-            for i, joint_data in enumerate(monitor_data[5]):
-                if isinstance(joint_data, list) and len(joint_data) >= 8:
-                    self.joints_table.setItem(i, 1, QTableWidgetItem(f"{joint_positions[i]:.2f}" if i < len(joint_positions) else "N/A"))
-                    self.joints_table.setItem(i, 2, QTableWidgetItem(f"{joint_velocities[i]:.3f}" if i < len(joint_velocities) else "N/A"))
-                    
-                    # Corrente
-                    current_item = QTableWidgetItem(f"{abs(joint_data[0]):.3f}")
-                    if abs(joint_data[0]) >= config.THRESHOLDS["joint_current_critical"]:
-                        current_item.setBackground(QColor(255, 0, 0, 100))
-                    elif abs(joint_data[0]) >= config.THRESHOLDS["joint_current_warning"]:
-                        current_item.setBackground(QColor(255, 165, 0, 100))
-                    self.joints_table.setItem(i, 3, current_item)
-                    
-                    # Temperatura
-                    temp_item = QTableWidgetItem(f"{joint_data[1]:.1f}")
-                    if joint_data[1] >= config.THRESHOLDS["joint_temperature_critical"]:
-                        temp_item.setBackground(QColor(255, 0, 0, 100))
-                    elif joint_data[1] >= config.THRESHOLDS["joint_temperature_warning"]:
-                        temp_item.setBackground(QColor(255, 165, 0, 100))
-                    self.joints_table.setItem(i, 4, temp_item)
-                    
-                    self.joints_table.setItem(i, 5, QTableWidgetItem(f"{joint_data[2]:.1f}"))
-                    self.joints_table.setItem(i, 6, QTableWidgetItem(f"{abs(joint_data[7]):.2f}"))
+            # Atualizar informações do robô
+            self.robot_id_label.setText(str(data.get("ID", "N/A")))
+            self.robot_name_label.setText(data.get("NOME", "N/A"))
+            
+            monitor_data = data.get("monitor_data", [])
+            if len(monitor_data) > 2:
+                temp = monitor_data[2]
+                self.robot_temp_label.setText(f"{temp:.1f}°C")
+                
+                # Colorir baseado na temperatura
+                if temp >= config.THRESHOLDS["robot_temp_critical"]:
+                    self.robot_temp_label.setStyleSheet("color: red; font-weight: bold;")
+                elif temp >= config.THRESHOLDS["robot_temp_warning"]:
+                    self.robot_temp_label.setStyleSheet("color: orange; font-weight: bold;")
+                else:
+                    self.robot_temp_label.setStyleSheet("color: green;")
+            
+            # Estado da tarefa
+            task_states = {0: "Desconhecido", 1: "Iniciando", 2: "Executando", 3: "Pausado", 4: "IDLE", 5: "Erro"}
+            self.task_state_label.setText(task_states.get(data.get("task_state", 0), "Desconhecido"))
+            
+            # Posição TCP
+            position = data.get("actual_position", [0]*6)
+            if len(position) >= 6:
+                self.tcp_x_label.setText(f"{position[0]:.2f}")
+                self.tcp_y_label.setText(f"{position[1]:.2f}")
+                self.tcp_z_label.setText(f"{position[2]:.2f}")
+                self.tcp_rx_label.setText(f"{position[3]:.2f}")
+                self.tcp_ry_label.setText(f"{position[4]:.2f}")
+                self.tcp_rz_label.setText(f"{position[5]:.2f}")
+            
+            # Atualizar tabela de juntas (otimizado)
+            self._update_joints_table_fast(data, monitor_data)
+            
+        except Exception as e:
+            logging.error(f"Erro ao atualizar UI: {e}")
+    
+    def _update_joints_table_fast(self, data: dict, monitor_data: list):
+        """Atualiza tabela de juntas de forma otimizada"""
+        try:
+            if len(monitor_data) > 5 and isinstance(monitor_data[5], list):
+                joint_positions = data.get("joint_actual_position", [])
+                joint_velocities = data.get("instVel", [])
+                
+                for i, joint_data in enumerate(monitor_data[5]):
+                    if isinstance(joint_data, list) and len(joint_data) >= 8:
+                        # Posição - Usar setText ao invés de criar novos QTableWidgetItem
+                        item = self.joints_table.item(i, 1)
+                        if item:
+                            item.setText(f"{joint_positions[i]:.2f}" if i < len(joint_positions) else "N/A")
+                        else:
+                            self.joints_table.setItem(i, 1, QTableWidgetItem(f"{joint_positions[i]:.2f}" if i < len(joint_positions) else "N/A"))
+                        
+                        # Velocidade
+                        vel_item = self.joints_table.item(i, 2)
+                        vel_text = f"{joint_velocities[i]:.3f}" if i < len(joint_velocities) else "N/A"
+                        if vel_item:
+                            vel_item.setText(vel_text)
+                        else:
+                            self.joints_table.setItem(i, 2, QTableWidgetItem(vel_text))
+                        
+                        # Corrente
+                        current_item = QTableWidgetItem(f"{abs(joint_data[0]):.3f}")
+                        if abs(joint_data[0]) >= config.THRESHOLDS["joint_current_critical"]:
+                            current_item.setBackground(QColor(255, 0, 0, 100))
+                        elif abs(joint_data[0]) >= config.THRESHOLDS["joint_current_warning"]:
+                            current_item.setBackground(QColor(255, 165, 0, 100))
+                        self.joints_table.setItem(i, 3, current_item)
+                        
+                        # Temperatura
+                        temp_item = QTableWidgetItem(f"{joint_data[1]:.1f}")
+                        if joint_data[1] >= config.THRESHOLDS["joint_temperature_critical"]:
+                            temp_item.setBackground(QColor(255, 0, 0, 100))
+                        elif joint_data[1] >= config.THRESHOLDS["joint_temperature_warning"]:
+                            temp_item.setBackground(QColor(255, 165, 0, 100))
+                        self.joints_table.setItem(i, 4, temp_item)
+                        
+                        self.joints_table.setItem(i, 5, QTableWidgetItem(f"{joint_data[2]:.1f}"))
+                        self.joints_table.setItem(i, 6, QTableWidgetItem(f"{abs(joint_data[7]):.2f}"))
+        except Exception as e:
+            logging.error(f"Erro ao atualizar tabela de juntas: {e}")
     
     def update_ui(self):
         """Atualização periódica da UI"""
