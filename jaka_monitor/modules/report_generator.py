@@ -5,6 +5,7 @@ Cria relatórios em PDF e Excel com gráficos e análises
 import os
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
+from threading import Lock
 import matplotlib
 matplotlib.use('Agg')  # Backend sem interface gráfica
 import matplotlib.pyplot as plt
@@ -21,7 +22,7 @@ import config
 
 
 class ReportGenerator:
-    """Gerador de relatórios em PDF e Excel"""
+    """Gerador de relatórios em PDF e Excel (thread-safe)"""
     
     def __init__(self, db_manager):
         """
@@ -33,6 +34,7 @@ class ReportGenerator:
         self.db = db_manager
         self.reports_dir = config.REPORTS_DIR
         os.makedirs(self.reports_dir, exist_ok=True)
+        self._plot_lock = Lock()  # Lock para operações de plot (matplotlib não é thread-safe)
         
         # Configurar estilo de gráficos
         plt.style.use('seaborn-v0_8-darkgrid')
@@ -271,7 +273,7 @@ class ReportGenerator:
         return graph_paths
     
     def _plot_joint_temperatures(self, start_time: datetime, end_time: datetime, timestamp: str) -> Optional[str]:
-        """Plota temperaturas das juntas ao longo do tempo"""
+        """Plota temperaturas das juntas ao longo do tempo (thread-safe)"""
         data = self.db.get_joint_data_range(start_time.isoformat(), end_time.isoformat())
         
         if not data:
@@ -286,40 +288,41 @@ class ReportGenerator:
                 joint_data[joint_num]['times'].append(datetime.fromisoformat(row['timestamp']))
                 joint_data[joint_num]['temps'].append(row['temperature'])
         
-        # Plotar
-        fig, ax = plt.subplots(figsize=(12, 6))
-        
-        for joint_num in range(1, 7):
-            if joint_data[joint_num]['times']:
-                ax.plot(joint_data[joint_num]['times'], joint_data[joint_num]['temps'],
-                       label=f'Junta {joint_num}', marker='o', markersize=2, linewidth=1.5)
-        
-        # Linha de threshold
-        ax.axhline(y=config.THRESHOLDS['joint_temperature_warning'], color='orange',
-                  linestyle='--', label='Limite Alerta', linewidth=2)
-        ax.axhline(y=config.THRESHOLDS['joint_temperature_critical'], color='red',
-                  linestyle='--', label='Limite Crítico', linewidth=2)
-        
-        ax.set_xlabel('Data/Hora', fontsize=12)
-        ax.set_ylabel('Temperatura (°C)', fontsize=12)
-        ax.set_title('Evolução da Temperatura das Juntas', fontsize=14, fontweight='bold')
-        ax.legend(loc='best')
-        ax.grid(True, alpha=0.3)
-        
-        # Formatar eixo x
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-        fig.autofmt_xdate()
-        
-        plt.tight_layout()
-        
-        graph_path = os.path.join(self.reports_dir, f'temp_graph_{timestamp}.png')
-        plt.savefig(graph_path, dpi=config.PLOT_DPI, bbox_inches='tight')
-        plt.close()
-        
-        return graph_path
+        # Plotar com lock (matplotlib não é thread-safe)
+        with self._plot_lock:
+            fig, ax = plt.subplots(figsize=(12, 6))
+            
+            for joint_num in range(1, 7):
+                if joint_data[joint_num]['times']:
+                    ax.plot(joint_data[joint_num]['times'], joint_data[joint_num]['temps'],
+                           label=f'Junta {joint_num}', marker='o', markersize=2, linewidth=1.5)
+            
+            # Linha de threshold
+            ax.axhline(y=config.THRESHOLDS['joint_temperature_warning'], color='orange',
+                      linestyle='--', label='Limite Alerta', linewidth=2)
+            ax.axhline(y=config.THRESHOLDS['joint_temperature_critical'], color='red',
+                      linestyle='--', label='Limite Crítico', linewidth=2)
+            
+            ax.set_xlabel('Data/Hora', fontsize=12)
+            ax.set_ylabel('Temperatura (°C)', fontsize=12)
+            ax.set_title('Evolução da Temperatura das Juntas', fontsize=14, fontweight='bold')
+            ax.legend(loc='best')
+            ax.grid(True, alpha=0.3)
+            
+            # Formatar eixo x
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+            fig.autofmt_xdate()
+            
+            plt.tight_layout()
+            
+            graph_path = os.path.join(self.reports_dir, f'temp_graph_{timestamp}.png')
+            plt.savefig(graph_path, dpi=config.PLOT_DPI, bbox_inches='tight')
+            plt.close()
+            
+            return graph_path
     
     def _plot_joint_currents(self, start_time: datetime, end_time: datetime, timestamp: str) -> Optional[str]:
-        """Plota correntes das juntas ao longo do tempo"""
+        """Plota correntes das juntas ao longo do tempo (thread-safe)"""
         data = self.db.get_joint_data_range(start_time.isoformat(), end_time.isoformat())
         
         if not data:
@@ -334,40 +337,41 @@ class ReportGenerator:
                 joint_data[joint_num]['times'].append(datetime.fromisoformat(row['timestamp']))
                 joint_data[joint_num]['currents'].append(abs(row['current']))
         
-        # Plotar
-        fig, ax = plt.subplots(figsize=(12, 6))
-        
-        for joint_num in range(1, 7):
-            if joint_data[joint_num]['times']:
-                ax.plot(joint_data[joint_num]['times'], joint_data[joint_num]['currents'],
-                       label=f'Junta {joint_num}', marker='o', markersize=2, linewidth=1.5)
-        
-        # Linha de threshold
-        ax.axhline(y=config.THRESHOLDS['joint_current_warning'], color='orange',
-                  linestyle='--', label='Limite Alerta', linewidth=2)
-        ax.axhline(y=config.THRESHOLDS['joint_current_critical'], color='red',
-                  linestyle='--', label='Limite Crítico', linewidth=2)
-        
-        ax.set_xlabel('Data/Hora', fontsize=12)
-        ax.set_ylabel('Corrente (A)', fontsize=12)
-        ax.set_title('Evolução da Corrente das Juntas', fontsize=14, fontweight='bold')
-        ax.legend(loc='best')
-        ax.grid(True, alpha=0.3)
-        
-        # Formatar eixo x
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-        fig.autofmt_xdate()
-        
-        plt.tight_layout()
-        
-        graph_path = os.path.join(self.reports_dir, f'current_graph_{timestamp}.png')
-        plt.savefig(graph_path, dpi=config.PLOT_DPI, bbox_inches='tight')
-        plt.close()
-        
-        return graph_path
+        # Plotar com lock (matplotlib não é thread-safe)
+        with self._plot_lock:
+            fig, ax = plt.subplots(figsize=(12, 6))
+            
+            for joint_num in range(1, 7):
+                if joint_data[joint_num]['times']:
+                    ax.plot(joint_data[joint_num]['times'], joint_data[joint_num]['currents'],
+                           label=f'Junta {joint_num}', marker='o', markersize=2, linewidth=1.5)
+            
+            # Linha de threshold
+            ax.axhline(y=config.THRESHOLDS['joint_current_warning'], color='orange',
+                      linestyle='--', label='Limite Alerta', linewidth=2)
+            ax.axhline(y=config.THRESHOLDS['joint_current_critical'], color='red',
+                      linestyle='--', label='Limite Crítico', linewidth=2)
+            
+            ax.set_xlabel('Data/Hora', fontsize=12)
+            ax.set_ylabel('Corrente (A)', fontsize=12)
+            ax.set_title('Evolução da Corrente das Juntas', fontsize=14, fontweight='bold')
+            ax.legend(loc='best')
+            ax.grid(True, alpha=0.3)
+            
+            # Formatar eixo x
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+            fig.autofmt_xdate()
+            
+            plt.tight_layout()
+            
+            graph_path = os.path.join(self.reports_dir, f'current_graph_{timestamp}.png')
+            plt.savefig(graph_path, dpi=config.PLOT_DPI, bbox_inches='tight')
+            plt.close()
+            
+            return graph_path
     
     def _plot_joint_torques(self, start_time: datetime, end_time: datetime, timestamp: str) -> Optional[str]:
-        """Plota torques das juntas ao longo do tempo"""
+        """Plota torques das juntas ao longo do tempo (thread-safe)"""
         data = self.db.get_joint_data_range(start_time.isoformat(), end_time.isoformat())
         
         if not data:
@@ -382,37 +386,38 @@ class ReportGenerator:
                 joint_data[joint_num]['times'].append(datetime.fromisoformat(row['timestamp']))
                 joint_data[joint_num]['torques'].append(abs(row['torque']))
         
-        # Plotar
-        fig, ax = plt.subplots(figsize=(12, 6))
-        
-        for joint_num in range(1, 7):
-            if joint_data[joint_num]['times']:
-                ax.plot(joint_data[joint_num]['times'], joint_data[joint_num]['torques'],
-                       label=f'Junta {joint_num}', marker='o', markersize=2, linewidth=1.5)
-        
-        # Linha de threshold
-        ax.axhline(y=config.THRESHOLDS['joint_torque_warning'], color='orange',
-                  linestyle='--', label='Limite Alerta', linewidth=2)
-        ax.axhline(y=config.THRESHOLDS['joint_torque_critical'], color='red',
-                  linestyle='--', label='Limite Crítico', linewidth=2)
-        
-        ax.set_xlabel('Data/Hora', fontsize=12)
-        ax.set_ylabel('Torque', fontsize=12)
-        ax.set_title('Evolução do Torque/Carga das Juntas', fontsize=14, fontweight='bold')
-        ax.legend(loc='best')
-        ax.grid(True, alpha=0.3)
-        
-        # Formatar eixo x
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-        fig.autofmt_xdate()
-        
-        plt.tight_layout()
-        
-        graph_path = os.path.join(self.reports_dir, f'torque_graph_{timestamp}.png')
-        plt.savefig(graph_path, dpi=config.PLOT_DPI, bbox_inches='tight')
-        plt.close()
-        
-        return graph_path
+        # Plotar com lock (matplotlib não é thread-safe)
+        with self._plot_lock:
+            fig, ax = plt.subplots(figsize=(12, 6))
+            
+            for joint_num in range(1, 7):
+                if joint_data[joint_num]['times']:
+                    ax.plot(joint_data[joint_num]['times'], joint_data[joint_num]['torques'],
+                           label=f'Junta {joint_num}', marker='o', markersize=2, linewidth=1.5)
+            
+            # Linha de threshold
+            ax.axhline(y=config.THRESHOLDS['joint_torque_warning'], color='orange',
+                      linestyle='--', label='Limite Alerta', linewidth=2)
+            ax.axhline(y=config.THRESHOLDS['joint_torque_critical'], color='red',
+                      linestyle='--', label='Limite Crítico', linewidth=2)
+            
+            ax.set_xlabel('Data/Hora', fontsize=12)
+            ax.set_ylabel('Torque', fontsize=12)
+            ax.set_title('Evolução do Torque/Carga das Juntas', fontsize=14, fontweight='bold')
+            ax.legend(loc='best')
+            ax.grid(True, alpha=0.3)
+            
+            # Formatar eixo x
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+            fig.autofmt_xdate()
+            
+            plt.tight_layout()
+            
+            graph_path = os.path.join(self.reports_dir, f'torque_graph_{timestamp}.png')
+            plt.savefig(graph_path, dpi=config.PLOT_DPI, bbox_inches='tight')
+            plt.close()
+            
+            return graph_path
     
     def export_to_excel(self, hours: int = 24) -> str:
         """

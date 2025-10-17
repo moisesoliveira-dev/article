@@ -7,7 +7,7 @@ import os
 from datetime import datetime
 from typing import Optional
 from queue import Queue
-from threading import Lock
+from threading import Lock, Thread
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                             QLabel, QPushButton, QTextEdit, QGroupBox, QGridLayout, 
                             QTableWidget, QTableWidgetItem, QTabWidget, QProgressBar,
@@ -76,7 +76,6 @@ class MonitorThread(QThread):
             self.mqtt_client.start()
             
             # Iniciar thread de processamento de banco de dados
-            from threading import Thread
             db_thread = Thread(target=self._process_db_queue, daemon=True)
             db_thread.start()
             
@@ -140,7 +139,8 @@ class MonitorThread(QThread):
             logging.error(f"Erro ao processar mensagem async: {e}")
     
     def _process_db_queue(self):
-        """Thread separada para processar operações de banco de dados"""
+        """Thread separada para processar operações de banco de dados de forma assíncrona"""
+        import time
         while self.processing:
             try:
                 if not self.db_queue.empty():
@@ -148,32 +148,36 @@ class MonitorThread(QThread):
                     data = item['data']
                     anomalies = item['anomalies']
                     
-                    # Salvar dados no banco (operação bloqueante isolada)
-                    if self.db_manager:
-                        try:
-                            self.db_manager.insert_robot_data(data)
-                            
-                            # Registrar anomalias
-                            for anomaly in anomalies:
-                                anomaly_key = f"{anomaly.get('type')}_{anomaly.get('joint', 0)}"
-                                severity, duration = self.analyzer.calculate_criticality(
-                                    anomaly_key, anomaly.get('severity', 'info')
-                                )
+                    # Processar em thread separada para não bloquear
+                    def save_to_db():
+                        if self.db_manager:
+                            try:
+                                self.db_manager.insert_robot_data(data)
                                 
-                                self.db_manager.insert_event(
-                                    event_type=anomaly.get('type', 'unknown'),
-                                    severity=severity,
-                                    description=anomaly.get('description', ''),
-                                    joint_number=anomaly.get('joint'),
-                                    value=anomaly.get('value'),
-                                    threshold=anomaly.get('threshold'),
-                                    duration=duration
-                                )
-                        except Exception as e:
-                            logging.error(f"Erro ao salvar no banco: {e}")
+                                # Registrar anomalias
+                                for anomaly in anomalies:
+                                    anomaly_key = f"{anomaly.get('type')}_{anomaly.get('joint', 0)}"
+                                    severity, duration = self.analyzer.calculate_criticality(
+                                        anomaly_key, anomaly.get('severity', 'info')
+                                    )
+                                    
+                                    self.db_manager.insert_event(
+                                        event_type=anomaly.get('type', 'unknown'),
+                                        severity=severity,
+                                        description=anomaly.get('description', ''),
+                                        joint_number=anomaly.get('joint'),
+                                        value=anomaly.get('value'),
+                                        threshold=anomaly.get('threshold'),
+                                        duration=duration
+                                    )
+                            except Exception as e:
+                                logging.error(f"Erro ao salvar no banco: {e}")
+                    
+                    # Executar em thread daemon para não bloquear
+                    save_thread = Thread(target=save_to_db, daemon=True)
+                    save_thread.start()
                 else:
                     # Aguardar se não há nada na fila
-                    import time
                     time.sleep(0.1)
             
             except Exception as e:
@@ -798,9 +802,25 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage("Painel de anomalias limpo")
     
     def load_events(self):
-        """Carrega eventos do banco de dados"""
-        events = self.db_manager.get_events(hours=24)
+        """Carrega eventos do banco de dados em thread separada"""
+        self.status_bar.showMessage("Carregando eventos...")
         
+        def load_events_async():
+            try:
+                events = self.db_manager.get_events(hours=24)
+                
+                # Atualizar UI na thread principal
+                QTimer.singleShot(0, lambda: self._update_events_table(events))
+            except Exception as e:
+                logging.error(f"Erro ao carregar eventos: {e}")
+                QTimer.singleShot(0, lambda: self.status_bar.showMessage("Erro ao carregar eventos"))
+        
+        # Executar em thread separada
+        load_thread = Thread(target=load_events_async, daemon=True)
+        load_thread.start()
+    
+    def _update_events_table(self, events):
+        """Atualiza tabela de eventos (deve ser chamado na thread principal)"""
         self.events_table.setRowCount(len(events))
         
         for i, event in enumerate(events):
@@ -814,36 +834,66 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage(f"{len(events)} eventos carregados")
     
     def generate_pdf_report(self):
-        """Gera relatório PDF"""
-        try:
-            self.status_bar.showMessage("Gerando relatório PDF...")
-            pdf_path = self.report_generator.generate_full_report(hours=24)
-            
-            QMessageBox.information(self, "Sucesso", f"Relatório gerado:\n{pdf_path}")
-            self.status_bar.showMessage(f"Relatório PDF gerado: {pdf_path}")
-            
-            # Abrir pasta
-            os.startfile(os.path.dirname(pdf_path))
+        """Gera relatório PDF em thread separada"""
+        self.status_bar.showMessage("Gerando relatório PDF...")
         
-        except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Erro ao gerar relatório: {e}")
-            self.status_bar.showMessage("Erro ao gerar relatório")
+        def generate_pdf_async():
+            try:
+                pdf_path = self.report_generator.generate_full_report(hours=24)
+                
+                # Atualizar UI na thread principal
+                QTimer.singleShot(0, lambda: self._on_pdf_generated(pdf_path))
+            except Exception as e:
+                logging.error(f"Erro ao gerar PDF: {e}")
+                QTimer.singleShot(0, lambda: self._on_pdf_error(str(e)))
+        
+        # Executar em thread separada
+        pdf_thread = Thread(target=generate_pdf_async, daemon=True)
+        pdf_thread.start()
+    
+    def _on_pdf_generated(self, pdf_path):
+        """Callback quando PDF é gerado (thread principal)"""
+        QMessageBox.information(self, "Sucesso", f"Relatório gerado:\n{pdf_path}")
+        self.status_bar.showMessage(f"Relatório PDF gerado: {pdf_path}")
+        
+        # Abrir pasta em thread separada
+        Thread(target=lambda: os.startfile(os.path.dirname(pdf_path)), daemon=True).start()
+    
+    def _on_pdf_error(self, error_msg):
+        """Callback quando há erro na geração de PDF (thread principal)"""
+        QMessageBox.critical(self, "Erro", f"Erro ao gerar relatório: {error_msg}")
+        self.status_bar.showMessage("Erro ao gerar relatório")
     
     def export_excel(self):
-        """Exporta dados para Excel"""
-        try:
-            self.status_bar.showMessage("Exportando para Excel...")
-            excel_path = self.report_generator.export_to_excel(hours=24)
-            
-            QMessageBox.information(self, "Sucesso", f"Dados exportados:\n{excel_path}")
-            self.status_bar.showMessage(f"Dados exportados: {excel_path}")
-            
-            # Abrir pasta
-            os.startfile(os.path.dirname(excel_path))
+        """Exporta dados para Excel em thread separada"""
+        self.status_bar.showMessage("Exportando para Excel...")
         
-        except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Erro ao exportar: {e}")
-            self.status_bar.showMessage("Erro ao exportar dados")
+        def export_excel_async():
+            try:
+                excel_path = self.report_generator.export_to_excel(hours=24)
+                
+                # Atualizar UI na thread principal
+                QTimer.singleShot(0, lambda: self._on_excel_exported(excel_path))
+            except Exception as e:
+                logging.error(f"Erro ao exportar Excel: {e}")
+                QTimer.singleShot(0, lambda: self._on_excel_error(str(e)))
+        
+        # Executar em thread separada
+        excel_thread = Thread(target=export_excel_async, daemon=True)
+        excel_thread.start()
+    
+    def _on_excel_exported(self, excel_path):
+        """Callback quando Excel é exportado (thread principal)"""
+        QMessageBox.information(self, "Sucesso", f"Dados exportados:\n{excel_path}")
+        self.status_bar.showMessage(f"Dados exportados: {excel_path}")
+        
+        # Abrir pasta em thread separada
+        Thread(target=lambda: os.startfile(os.path.dirname(excel_path)), daemon=True).start()
+    
+    def _on_excel_error(self, error_msg):
+        """Callback quando há erro na exportação (thread principal)"""
+        QMessageBox.critical(self, "Erro", f"Erro ao exportar: {error_msg}")
+        self.status_bar.showMessage("Erro ao exportar dados")
     
     def closeEvent(self, event):
         """Trata fechamento da janela"""

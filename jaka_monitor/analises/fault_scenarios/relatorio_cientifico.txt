@@ -1,0 +1,156 @@
+================================================================================
+RELATÓRIO DE ANÁLISE DE CENÁRIOS DE FALHAS
+Sistema de Monitoramento Preditivo - Robô JAKA
+================================================================================
+
+Data da Análise: 17/10/2025 16:49:40
+
+
+────────────────────────────────────────────────────────────────────────────────
+CENÁRIO 1: Desgaste de Rolamento
+────────────────────────────────────────────────────────────────────────────────
+
+📋 DESCRIÇÃO:
+   Desgaste progressivo do rolamento causando aumento de temperatura,
+   vibração e consumo de corrente devido ao atrito excessivo.
+
+🔬 CAUSA FÍSICA:
+   - Fadiga do material do rolamento
+   - Perda de esfericidade das esferas/roletes
+   - Aumento de folgas internas
+   - Perda de lubrificação
+
+📊 MÉTRICAS OBSERVADAS:
+   • Temperatura máxima: 24.00°C
+   • Taxa de aquecimento: -0.0004°C/min
+   • Variabilidade de corrente (CV): -0.0023
+   • Aumento de torque: 0.000 Nm
+   • Frequência dominante: 0.010 Hz
+
+⚠️  INDICADORES DE FALHA:
+
+💡 INTERPRETAÇÃO CIENTÍFICA:
+   O desgaste do rolamento manifesta-se através de três fenômenos principais:
+   1. Aumento térmico: O atrito metal-metal gera calor dissipado
+   2. Vibração mecânica: Irregularidades na superfície causam oscilações
+   3. Sobrecarga elétrica: Motor compensa perdas mecânicas
+
+
+────────────────────────────────────────────────────────────────────────────────
+CENÁRIO 2: Superaquecimento do Motor
+────────────────────────────────────────────────────────────────────────────────
+
+📋 DESCRIÇÃO:
+   Superaquecimento crítico do motor por obstrução de ventilação
+   ou operação em sobrecarga contínua.
+
+🔬 CAUSA FÍSICA:
+   - Obstrução das aletas de resfriamento
+   - Falha do sistema de ventilação forçada
+   - Operação acima da capacidade térmica nominal
+   - Acúmulo de calor por ciclos repetitivos
+
+📊 MÉTRICAS OBSERVADAS:
+   • Temperatura máxima: 23.00°C
+   • Elevação de temperatura: 0.00°C
+   • Aumento de corrente: -0.2%
+   • Índice de estresse térmico: 0.0000
+
+⚠️  INDICADORES DE FALHA:
+
+💡 INTERPRETAÇÃO CIENTÍFICA:
+   O motor elétrico possui limite de temperatura operacional (tipicamente 80°C).
+   O superaquecimento acelera a degradação dos enrolamentos e pode causar:
+   - Redução da vida útil do isolamento (regra: +10°C = -50% vida útil)
+   - Aumento da resistência elétrica dos enrolamentos
+   - Thermal runaway em casos extremos
+
+
+────────────────────────────────────────────────────────────────────────────────
+CENÁRIO 3: Degradação da Fonte de Alimentação
+────────────────────────────────────────────────────────────────────────────────
+
+📋 DESCRIÇÃO:
+   Degradação dos componentes da fonte de alimentação causando
+   instabilidade na tensão fornecida ao sistema.
+
+🔬 CAUSA FÍSICA:
+   - Capacitores eletrolíticos degradados (ESR aumentado)
+   - Reguladores de tensão com deriva térmica
+   - Conexões oxidadas ou soltas
+   - Filtros EMI comprometidos
+
+📊 ESTATÍSTICAS POR JUNTA:
+
+   Junta 1:
+      Tensão média: 48.00V
+      Desvio padrão: 0.000V
+      Coef. variação: 0.00%
+      Tensão mínima: 48.00V
+      Quedas detectadas: 0
+
+   Junta 2:
+      Tensão média: 49.04V
+      Desvio padrão: 0.202V
+      Coef. variação: 0.41%
+      Tensão mínima: 49.00V
+      Quedas detectadas: 0
+
+   Junta 3:
+      Tensão média: 50.00V
+      Desvio padrão: 0.000V
+      Coef. variação: 0.00%
+      Tensão mínima: 50.00V
+      Quedas detectadas: 0
+
+   Junta 4:
+      Tensão média: 49.93V
+      Desvio padrão: 0.253V
+      Coef. variação: 0.51%
+      Tensão mínima: 49.00V
+      Quedas detectadas: 0
+
+   Junta 5:
+      Tensão média: 49.74V
+      Desvio padrão: 0.440V
+      Coef. variação: 0.88%
+      Tensão mínima: 49.00V
+      Quedas detectadas: 0
+
+   Junta 6:
+      Tensão média: 49.98V
+      Desvio padrão: 0.127V
+      Coef. variação: 0.25%
+      Tensão mínima: 49.00V
+      Quedas detectadas: 0
+
+⚠️  JUNTAS AFETADAS:
+
+💡 INTERPRETAÇÃO CIENTÍFICA:
+   A tensão de alimentação deve ser estável (±2% nominal).
+   Instabilidades causam:
+   - Variação no torque disponível (proporcional a V²)
+   - Ripple na corrente de controle
+   - Possíveis resets do controlador em quedas severas
+   - Aquecimento adicional por perdas RMS
+
+
+================================================================================
+CONCLUSÕES E RECOMENDAÇÕES
+================================================================================
+
+Os cenários simulados demonstram a eficácia do sistema de monitoramento
+preditivo na detecção precoce de falhas através da análise de grandezas
+físicas correlacionadas.
+
+📈 PRINCIPAIS DESCOBERTAS:
+   1. Temperatura: Indicador primário de degradação mecânica
+   2. Variabilidade de corrente: Indicador de problemas mecânicos (vibração)
+   3. Tensão: Indicador de problemas elétricos da infraestrutura
+   4. Torque: Indicador de desgaste/atrito excessivo
+
+🔧 RECOMENDAÇÕES DE MANUTENÇÃO:
+   • Temperatura >60°C: Inspecionar sistema de resfriamento
+   • CV corrente >15%: Verificar rolamentos e transmissão
+   • Quedas de tensão: Auditar fonte de alimentação
+   • Aumento de torque >20%: Verificar lubrificação

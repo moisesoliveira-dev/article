@@ -1,0 +1,32 @@
+2025-10-17 08:20:19,410 - modules.mqtt_client - INFO - Conectando ao broker 147.1.5.238:1883...
+2025-10-17 08:20:19,441 - modules.mqtt_client - INFO - Loop MQTT iniciado
+2025-10-17 08:20:19,444 - modules.mqtt_client - INFO - [OK] Conectado ao broker MQTT: 147.1.5.238:1883
+2025-10-17 08:20:19,444 - modules.mqtt_client - INFO - [OK] Subscrito ao tópico: jaka/monitor (QoS 1)
+2025-10-17 08:21:13,758 - modules.mqtt_client - INFO - Desconectado do broker MQTT
+2025-10-17 08:21:13,759 - modules.mqtt_client - INFO - Cliente MQTT encerrado
+2025-10-17 10:43:54,495 - modules.mqtt_client - INFO - Conectando ao broker 147.1.5.238:1883...
+2025-10-17 10:43:54,509 - modules.mqtt_client - INFO - Loop MQTT iniciado
+2025-10-17 10:43:54,511 - modules.mqtt_client - INFO - [OK] Conectado ao broker MQTT: 147.1.5.238:1883
+2025-10-17 10:43:54,511 - modules.mqtt_client - INFO - [OK] Subscrito ao tópico: jaka/monitor (QoS 1)
+2025-10-17 12:20:12,629 - modules.mqtt_client - WARNING - Desconexão inesperada (código 7). Tentando reconectar...
+2025-10-17 12:20:17,138 - modules.mqtt_client - INFO - [OK] Conectado ao broker MQTT: 147.1.5.238:1883
+2025-10-17 12:20:17,908 - modules.mqtt_client - INFO - [OK] Subscrito ao tópico: jaka/monitor (QoS 1)
+2025-10-17 13:24:37,847 - modules.mqtt_client - WARNING - Desconexão inesperada (código 7). Tentando reconectar...
+2025-10-17 13:24:43,782 - modules.mqtt_client - INFO - [OK] Conectado ao broker MQTT: 147.1.5.238:1883
+2025-10-17 13:24:45,099 - modules.mqtt_client - INFO - [OK] Subscrito ao tópico: jaka/monitor (QoS 1)
+2025-10-17 14:03:08,972 - modules.mqtt_client - INFO - Conectando ao broker 147.1.5.238:1883...
+2025-10-17 14:03:09,006 - modules.mqtt_client - INFO - Loop MQTT iniciado
+2025-10-17 14:03:09,007 - modules.mqtt_client - INFO - [OK] Conectado ao broker MQTT: 147.1.5.238:1883
+2025-10-17 14:03:09,008 - modules.mqtt_client - INFO - [OK] Subscrito ao tópico: jaka/monitor (QoS 1)
+2025-10-17 14:41:24,091 - modules.mqtt_client - INFO - Conectando ao broker 147.1.5.238:1883...
+2025-10-17 14:41:24,117 - modules.mqtt_client - INFO - Loop MQTT iniciado
+2025-10-17 14:41:24,143 - modules.mqtt_client - INFO - [OK] Conectado ao broker MQTT: 147.1.5.238:1883
+2025-10-17 14:41:24,144 - modules.mqtt_client - INFO - [OK] Subscrito ao tópico: jaka/monitor (QoS 1)
+2025-10-17 15:34:05,443 - modules.mqtt_client - INFO - Conectando ao broker 147.1.5.238:1883...
+2025-10-17 15:34:05,472 - modules.mqtt_client - INFO - Loop MQTT iniciado
+2025-10-17 15:34:05,476 - modules.mqtt_client - INFO - [OK] Conectado ao broker MQTT: 147.1.5.238:1883
+2025-10-17 15:34:05,477 - modules.mqtt_client - INFO - [OK] Subscrito ao tópico: jaka/monitor (QoS 1)
+2025-10-17 15:57:43,858 - modules.mqtt_client - INFO - Conectando ao broker 147.1.5.238:1883...
+2025-10-17 15:57:43,896 - modules.mqtt_client - INFO - Loop MQTT iniciado
+2025-10-17 15:57:43,896 - modules.mqtt_client - INFO - [OK] Conectado ao broker MQTT: 147.1.5.238:1883
+2025-10-17 15:57:43,896 - modules.mqtt_client - INFO - [OK] Subscrito ao tópico: jaka/monitor (QoS 1)

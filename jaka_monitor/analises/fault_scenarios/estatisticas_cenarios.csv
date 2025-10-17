@@ -1,0 +1,3 @@
+﻿Cenário,Junta,Temp_Max_C,Taxa_Aquecimento_C_min,Var_Corrente_CV,Aumento_Torque_Nm,Freq_Vibracao_Hz,Elevacao_Temp_C,Tempo_Critico_s,Aumento_Corrente_pct,Indice_Estresse_Termico
+Desgaste de Rolamento,3,24.0,-0.0004255326060007557,-0.002302924773695332,0.0,0.00977198697068404,,,,
+Superaquecimento do Motor,2,23.0,,,,,0.0,,-0.17587203215945202,0.0

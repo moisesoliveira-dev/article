@@ -211,6 +211,128 @@ Inclui 3 abas:
 2. **Eventos**: Histórico completo de anomalias
 3. **Estatísticas**: Médias e máximos por junta
 
+---
+
+## 📊 Como Extrair e Analisar Resultados
+
+### 🎯 **3 Métodos Disponíveis:**
+
+#### **1. Interface Gráfica (Mais Fácil) ⭐**
+```powershell
+python main_gui.py
+```
+- Aba **"Relatórios"** → **Gerar PDF Completo**
+- Aba **"Relatórios"** → **Exportar Excel**
+- Resultados em: `reports/`
+
+#### **2. Script de Análise Rápida 🚀**
+```powershell
+python exemplo_analise.py
+```
+**Gera automaticamente:**
+- ✅ 4 gráficos em alta resolução (300 DPI)
+- ✅ Estatísticas completas em CSV
+- ✅ Análise de correlações
+- ✅ Resumo de anomalias
+- **Resultados em:** `analises/`
+
+#### **3. Python Personalizado 💻**
+```python
+import sqlite3
+import pandas as pd
+
+conn = sqlite3.connect('data/jaka_monitor.db')
+df = pd.read_sql_query("""
+    SELECT joint_number, AVG(temperature)
+    FROM joint_data
+    GROUP BY joint_number
+""", conn)
+print(df)
+```
+
+### 📚 **Documentação Completa:**
+- **`COMO_EXTRAIR_RESULTADOS.md`** - Guia rápido visual
+- **`GUIA_EXTRACAO_DADOS.md`** - Guia detalhado completo
+- **`QUERIES_SQL_UTEIS.md`** - 25+ queries prontas para usar
+- **`exemplo_analise.py`** - Script de exemplo funcional
+
+---
+
+## 🔬 Simulação de Falhas para Artigos Científicos
+
+### **Novo! Scripts de Simulação e Análise**
+
+Para pesquisa acadêmica e validação do sistema, incluímos simuladores de 9 cenários de falhas reais:
+
+#### **1. Simular Falhas**
+```bash
+python test_fault_scenarios.py
+```
+**Simula 9 cenários:**
+1. Desgaste de Rolamento
+2. Superaquecimento do Motor
+3. Degradação da Fonte
+4. Desgaste Mecânico
+5. Problema em Cabo
+6. Falta de Lubrificação
+7. Deriva do Encoder
+8. Sobrecarga Contínua
+9. Ressonância Mecânica
+
+#### **2. Analisar Resultados Científicos**
+```bash
+python analyze_fault_scenarios.py
+```
+**Gera automaticamente:**
+- ✅ Relatório científico formatado para artigos
+- ✅ Gráficos de alta resolução (300 DPI)
+- ✅ Estatísticas em CSV (prontas para tabelas)
+- ✅ Análise de correlações
+- ✅ Interpretações fundamentadas em física
+
+**Resultados em:** `analises/fault_scenarios/`
+
+#### **📖 Documentação de Simulação:**
+- **`QUICK_START_SIMULACAO.md`** ⚡ - Início rápido (3 comandos)
+- **`GUIA_SIMULACAO_FALHAS.md`** 🔬 - Guia completo técnico
+- **`FUNDAMENTOS_FISICOS.md`** 📐 - Base teórica e equações
+- **`SIMULACAO_FALHAS_RESUMO.md`** 📋 - Resumo executivo
+
+**Perfeito para:**
+- 🎓 Artigos científicos
+- 📊 Validação de sistemas
+- 🔬 Pesquisa acadêmica
+- 📈 Benchmarking
+
+### 📁 **Estrutura de Dados:**
+
+**Banco SQLite:** `data/jaka_monitor.db`
+
+**Tabelas Principais:**
+- `robot_data` - Dados gerais do robô
+- `joint_data` - Dados das 6 juntas (temp, corrente, torque, etc.)
+- `events` - Anomalias detectadas
+- `tcp_positions` - Posições do Tool Center Point
+- `statistics` - Estatísticas agregadas
+
+### 🎓 **Para Artigos Científicos:**
+
+**Checklist:**
+- [ ] Colete dados por **24+ horas**
+- [ ] Execute `python exemplo_analise.py`
+- [ ] Gere relatório PDF completo
+- [ ] Exporte dados para Excel
+- [ ] Salve gráficos (300 DPI - prontos para publicação)
+- [ ] Documente período e configurações
+
+**Gráficos Prontos:**
+- Evolução de temperatura (temporal)
+- Evolução de corrente (temporal)
+- Boxplot de distribuição
+- Heatmap de correlação
+
+---
+
 ## 🛠️ Solução de Problemas
 
 ### Erro de Conexão MQTT
